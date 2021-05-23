@@ -67,4 +67,39 @@ for question in questions:
 clean_answers = []
 for answer in answers:
     clean_answers.append(clean_text(question))
-    
+
+# creating dictionary to count word number in the question and answer
+# to make the training more effecient
+
+word2count = {}
+
+for question in clean_questions:
+    for word in question:
+        if word not in word2count:
+            word2count[word] = 1
+        else:
+            word2count[word] += 1
+
+for answer in clean_answers:
+    for word in answer:
+        if word not in word2count:
+            word2count[word] = 1
+        else:
+            word2count[word] += 1
+
+# Embedding the word
+threshold = 20
+questionsword2int = {}
+word_number = 0
+
+for word, count in word2count.items():
+    if count >= threshold:
+        questionsword2int[word] = word_number
+        word_number += 1 
+
+answersword2int = {}
+word_number = 0
+for word, count in word2count.items():
+    if count >= threshold:
+        answersword2int[word] = count
+        word_number += 1 
