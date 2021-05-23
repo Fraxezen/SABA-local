@@ -39,6 +39,7 @@ for conversation in conversation_ids:
         questions.append(id2line[conversation[i]])
         answers.append(id2line[conversation[i+1]])
 
+
 # cleaning the text, to make it easier to train
 # using testing data bahasa inggris
 def clean_text(text):
@@ -66,7 +67,7 @@ for question in questions:
 #cleaning answer
 clean_answers = []
 for answer in answers:
-    clean_answers.append(clean_text(question))
+    clean_answers.append(clean_text(answer))
 
 # creating dictionary to count word number in the question and answer
 # to make the training more effecient
@@ -118,3 +119,7 @@ for token in tokens:
 # Creating invers for the answer
 # membuat invers dari int ke kata-kata untuk jawaban robot
 answersint2word = {w_i : w for w, w_i in answersword2int.items()}
+
+# Adding the EOS token to the end of every answer
+for i in range(len(clean_answers)):
+    clean_answers[i] += ' <EOS>'
