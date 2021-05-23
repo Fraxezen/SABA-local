@@ -32,14 +32,15 @@ for conversation in conversations[:-1]:
 # seperate answer and question
 # question text adalah 1 text sebelum pertanyaan
 questions = []
-answer = []
+answers = []
 
 for conversation in conversation_ids:
     for i in range(len(conversation)-1):
         questions.append(id2line[conversation[i]])
-        answer.append(id2line[conversation[i+1]])
+        answers.append(id2line[conversation[i+1]])
 
-#cleaning the text, to make it easier to train
+# cleaning the text, to make it easier to train
+# using testing data bahasa inggris
 def clean_text(text):
     text = text.lower()
     text = re.sub(r"i'm", "i am", text)
@@ -56,3 +57,14 @@ def clean_text(text):
     text = re.sub(r"can't", "cannot", text)
     text = re.sub(r"[-()\"#/@;:<>{}+=~|.?,]", "", text)
     return text
+
+#cleaning question
+clean_questions = []
+for question in questions:
+    clean_questions.append(clean_text(question))
+
+#cleaning answer
+clean_answers = []
+for answer in answers:
+    clean_answers.append(clean_text(question))
+    
