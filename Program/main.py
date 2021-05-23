@@ -74,14 +74,15 @@ for answer in answers:
 word2count = {}
 
 for question in clean_questions:
-    for word in question:
+    for word in question.split():
         if word not in word2count:
             word2count[word] = 1
         else:
             word2count[word] += 1
 
+
 for answer in clean_answers:
-    for word in answer:
+    for word in answer.split():
         if word not in word2count:
             word2count[word] = 1
         else:
@@ -91,7 +92,6 @@ for answer in clean_answers:
 threshold = 20
 questionsword2int = {}
 word_number = 0
-
 for word, count in word2count.items():
     if count >= threshold:
         questionsword2int[word] = word_number
