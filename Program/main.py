@@ -103,3 +103,18 @@ for word, count in word2count.items():
     if count >= threshold:
         answersword2int[word] = count
         word_number += 1 
+
+# Adding Tokens
+# SOS = start of string
+# OOV = out of vocabulary
+# EOS = End of string
+tokens = ['<PAD>', '<EOS>', '<OOV>', '<SOS>']
+
+for token in tokens:
+    questionsword2int[token] = len(questionsword2int) + 1
+for token in tokens:
+    answersword2int[token] = len(answersword2int) + 1
+
+# Creating invers for the answer
+# membuat invers dari int ke kata-kata untuk jawaban robot
+answersint2word = {w_i : w for w, w_i in answersword2int.items()}
