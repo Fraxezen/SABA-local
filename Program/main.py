@@ -1,5 +1,4 @@
-#libraries
-
+#Libraries
 import numpy as np
 import tensorflow as tf
 import re
@@ -7,14 +6,14 @@ import time
 import os
 
 
-######### Data Preprocessing ############
+######### DATA PREPROCESSING ############
 
-# importing the dataset
+# Importing the dataset
 
 lines = open(os.path.abspath('Program\\movie_lines.txt'), encoding = 'utf-8', errors= 'ignore').read().split('\n')
 conversations = open(os.path.abspath('Program\\movie_conversations.txt'), encoding = 'utf-8', errors= 'ignore').read().split('\n')
 
-# data cleaning id and line
+# Data cleaning id and line
 id2line={}
 
 for line in lines:
@@ -22,15 +21,15 @@ for line in lines:
     if len(_line) == 5:
         id2line[_line[0]] = _line[4]
 
-# conversation data cleaning
+# Conversation data cleaning
 conversation_ids = []
 
 for conversation in conversations[:-1]:
     _conversation = conversation.split(' +++$+++ ')[-1][1:-1].replace("'","").replace(" ","")
     conversation_ids.append(_conversation.split(","))
 
-# seperate answer and question
-# question text adalah 1 text sebelum pertanyaan
+# Seperate answer and question
+# Question text adalah 1 text sebelum pertanyaan
 questions = []
 answers = []
 
@@ -40,8 +39,8 @@ for conversation in conversation_ids:
         answers.append(id2line[conversation[i+1]])
 
 
-# cleaning the text, to make it easier to train
-# using testing data bahasa inggris
+# Cleaning the text, to make it easier to train
+# Using testing data bahasa inggris
 def clean_text(text):
     text = text.lower()
     text = re.sub(r"i'm", "i am", text)
@@ -59,19 +58,20 @@ def clean_text(text):
     text = re.sub(r"[-()\"#/@;:<>{}+=~|.?,]", "", text)
     return text
 
-#cleaning question
+# Cleaning question
 clean_questions = []
+
 for question in questions:
     clean_questions.append(clean_text(question))
 
-#cleaning answer
+# Cleaning answer
 clean_answers = []
+
 for answer in answers:
     clean_answers.append(clean_text(answer))
 
 # creating dictionary to count word number in the question and answer
 # to make the training more effecient
-
 word2count = {}
 
 for question in clean_questions:
@@ -80,7 +80,6 @@ for question in clean_questions:
             word2count[word] = 1
         else:
             word2count[word] += 1
-
 
 for answer in clean_answers:
     for word in answer.split():
@@ -93,6 +92,7 @@ for answer in clean_answers:
 threshold = 20
 questionsword2int = {}
 word_number = 0
+
 for word, count in word2count.items():
     if count >= threshold:
         questionsword2int[word] = word_number
@@ -100,6 +100,7 @@ for word, count in word2count.items():
 
 answersword2int = {}
 word_number = 0
+
 for word, count in word2count.items():
     if count >= threshold:
         answersword2int[word] = count
@@ -117,9 +118,48 @@ for token in tokens:
     answersword2int[token] = len(answersword2int) + 1
 
 # Creating invers for the answer
-# membuat invers dari int ke kata-kata untuk jawaban robot
+# Membuat invers dari int ke kata-kata untuk jawaban robot
 answersint2word = {w_i : w for w, w_i in answersword2int.items()}
 
 # Adding the EOS token to the end of every answer
 for i in range(len(clean_answers)):
     clean_answers[i] += ' <EOS>'
+
+# Translating coversation into integer to train
+# Replacing filtered word by OOV
+questions_to_int = []
+for questions in clean_questions:
+    ints = []
+    for question in questions.split():
+        if question not in questionsword2int:
+            ints.append(questionsword2int['<OOV>'])
+        else:
+            ints.append(questionsword2int[question])
+        questions_to_int.append(ints)
+
+answers_to_int = []
+for answers in clean_answers:
+    ints = []
+    for answer in answers.split():
+        if answer not in answersword2int:
+            ints.append(answersword2int['<OOV>'])
+        else:
+            ints.append(answersword2int[answer])
+        answers_to_int.append(ints)
+
+# Sorting question and answer by the length of question
+# Padding it in the same length as we want to
+# Make it easier to train and optimize it
+
+sorted_clean_questions = []
+sorted_clean_answers = []
+
+# 25  here is parameter of the longest question we want to have
+for length in range(1, 25 + 1):
+    for i in enumerate(questions_to_int):
+        if len(i[1]) == length:
+            sorted_clean_questions.append(questions_to_int[i[0]])
+            sorted_clean_answers.append(answers_to_int[i[0]])
+
+
+########## BUILDING SEQ2SEQ MODEL ########
