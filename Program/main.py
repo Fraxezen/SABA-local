@@ -5,6 +5,8 @@ import re
 import time
 import os
 
+from tensorflow.python.framework import dtypes
+
 
 ######### DATA PREPROCESSING ############
 
@@ -185,3 +187,17 @@ def preprocess_target(targets, word2int, batch_size):
     right_side = tf.strided_slice(targets, [0,0], [batch_size, -1], [1,1])
     preprocessed_target = tf.concat([left_side, right_side], 1)
     return preprocessed_target
+
+
+### Encoder RNN Layer
+# rnn_inputs = the model inputs like inpputs, target, lr
+def encoder_rnn_layer(rnn_inputs, rnn_size, num_layers, keep_prob, sequence_length):
+    lstm = tf.compat.v1.nn.rnn_cell.BasicLSTMCell(rnn_size)
+    lstm_dropout = tf.compat.v1.nn.rnn_cell.DropoutWrapper(lstm, input_keep_prob = keep_prob)
+    encoder_cell = tf.compat.v1.nn.rnn_cell.MultiRNNCell([lstm_dropout] * num_layers)
+    _, encoder_state = tf.compat.v1.nn.bidirectional_dynamic_rnn(cell_fw = encoder_cell, 
+                                                                cell_bw = encoder_cell, 
+                                                                sequence_length = sequence_length, 
+                                                                inputs = rnn_inputs, 
+                                                                dtypes = tf.float32)
+    return encoder_state
