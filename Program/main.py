@@ -163,3 +163,16 @@ for length in range(1, 25 + 1):
 
 
 ########## BUILDING SEQ2SEQ MODEL ########
+
+# Place holders for the iunput and target
+# From numpy array data to tensor
+# Tensor all variable must be define as tensor flow place holder
+
+def model_input():
+    inputs = tf.compat.v1.placeholder(tf.int32, [None, None], name = 'input')
+    target = tf.compat.v1.placeholder(tf.int32, [None, None], name = 'target')
+    lr = tf.compat.v1.placeholder(tf.float32, name = 'learning_rate')
+    keep_prob = tf.compat.v1.placeholder(tf.float32, name = 'keep_prob')
+    return input, target, lr, keep_prob
+# [None, None] = 2 dimensional matrix
+# keep_prob control dropout
