@@ -342,5 +342,10 @@ def split_into_batches(questions, answers, batch_size):
         padded_answers_in_batch = np.array(apply_padding(answer_in_batch, answersword2int))
         yield padded_question_in_batch, padded_answers_in_batch
 
-
+# Splitting the question and answers into training and validation sets
+training_validation_split = int(len(sorted_clean_questions)) * 0.15
+training_question = sorted_clean_questions[training_validation_split:]
+training_question = sorted_clean_answers[training_validation_split:]
+validation_question = sorted_clean_questions[:training_validation_split]
+validation_question = sorted_clean_answers[:training_validation_split]
 
