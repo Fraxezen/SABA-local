@@ -164,10 +164,9 @@ for length in range(1, 25 + 1):
 
 ########## BUILDING SEQ2SEQ MODEL ########
 
-# Place holders for the iunput and target
+### Place holders for the iunput and target
 # From numpy array data to tensor
 # Tensor all variable must be define as tensor flow place holder
-
 def model_input():
     inputs = tf.compat.v1.placeholder(tf.int32, [None, None], name = 'input')
     target = tf.compat.v1.placeholder(tf.int32, [None, None], name = 'target')
@@ -176,3 +175,13 @@ def model_input():
     return input, target, lr, keep_prob
 # [None, None] = 2 dimensional matrix
 # keep_prob control dropout
+
+
+### Preprocessing the target
+# Batching
+# Add SOS and delete the last token
+def preprocess_target(targets, word2int, batch_size):
+    left_side = tf.fill([batch_size, 1], word2int['<SOS>'])
+    right_side = tf.strided_slice(targets, [0,0], [batch_size, -1], [1,1])
+    preprocessed_target = tf.concat([left_side, right_side], 1)
+    return preprocessed_target
