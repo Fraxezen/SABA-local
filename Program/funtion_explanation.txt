@@ -1,0 +1,7 @@
+Place Holder = 
+    Inserts a placeholder for a tensor that will be always fed.
+    A placeholder is simply a variable that we will assign data to 
+    at a later date. It allows us to create our operations and build 
+    our computation graph, without needing the data. In TensorFlow
+    terminology, we then feed data into the graph through these 
+    placeholders.
