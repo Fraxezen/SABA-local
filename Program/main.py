@@ -1,11 +1,16 @@
 #Libraries
 import numpy as np
+from numpy.lib.function_base import gradient
 import tensorflow as tf
 import re
 import time
 import os
-
-from tensorflow.python.framework import dtypes
+from tensorflow._api.v2.compat.v1.nn import rnn_cell
+from tensorflow.keras import initializers
+from tensorflow.python.client import session
+from tensorflow.python.keras.engine import training
+import tensorflow_addons as tfa
+from tensorflow_addons.utils.types import Optimizer
 
 
 ######### DATA PREPROCESSING ############
@@ -169,12 +174,13 @@ for length in range(1, 25 + 1):
 ### Place holders for the iunput and target
 # From numpy array data to tensor
 # Tensor all variable must be define as tensor flow place holder
-def model_input():
-    inputs = tf.compat.v1.placeholder(tf.int32, [None, None], name = 'input')
-    target = tf.compat.v1.placeholder(tf.int32, [None, None], name = 'target')
-    lr = tf.compat.v1.placeholder(tf.float32, name = 'learning_rate')
-    keep_prob = tf.compat.v1.placeholder(tf.float32, name = 'keep_prob')
-    return input, target, lr, keep_prob
+tf.compat.v1.disable_eager_execution()
+def model_inputs():
+    inputs = tf.compat.v1.placeholder(tf.compat.v1.int32, [None, None], name = 'input')
+    targets = tf.compat.v1.placeholder(tf.compat.v1.int32, [None, None], name = 'target')
+    lr = tf.compat.v1.placeholder(tf.compat.v1.int32, name = 'learning_rate')
+    keep_prob = tf.compat.v1.placeholder(tf.compat.v1.int32, name = 'keep_prob')
+    return inputs, targets, lr, keep_prob
 # [None, None] = 2 dimensional matrix
 # keep_prob control dropout
 
@@ -191,7 +197,7 @@ def preprocess_target(targets, word2int, batch_size):
 
 ### Encoder RNN Layer
 # rnn_inputs = the model inputs like inpputs, target, lr
-def encoder_rnn_layer(rnn_inputs, rnn_size, num_layers, keep_prob, sequence_length):
+def encoder_rnn(rnn_inputs, rnn_size, num_layers, keep_prob, sequence_length):
     lstm = tf.compat.v1.nn.rnn_cell.BasicLSTMCell(rnn_size)
     lstm_dropout = tf.compat.v1.nn.rnn_cell.DropoutWrapper(lstm, input_keep_prob = keep_prob)
     encoder_cell = tf.compat.v1.nn.rnn_cell.MultiRNNCell([lstm_dropout] * num_layers)
@@ -201,3 +207,140 @@ def encoder_rnn_layer(rnn_inputs, rnn_size, num_layers, keep_prob, sequence_leng
                                                                 inputs = rnn_inputs, 
                                                                 dtypes = tf.float32)
     return encoder_state
+
+
+### Decoding the training set
+def decode_training_set(encoder_state, decoder_cell, decoder_embedded_input, sequence_length, decoding_scope, output_function, keep_prob, batch_size):
+    attention_states = tf.zeros([batch_size, 1, decoder_cell.output_size])
+    attention_keys, attention_values, attention_score_function, attention_construct_function = tfa.seq2seq.AttentionWrapper(attention_states, attention_option = 'bahdanau', num_units = decoder_cell.output_size)
+    training_decoder_function = tfa.seq2seq.BeamSearchDecoder(encoder_state[0], attention_keys, attention_values, attention_score_function, attention_construct_function, name ='attn_dec_train')
+
+    decoder_ouput, _, _, = tfa.seq2seq.dynamic_decode(decoder_cell, training_decoder_function, decoder_embedded_input, sequence_length, scope = decoding_scope)
+    decoder_output_dropout = tf.nn.dropout(decoder_ouput, keep_prob)
+    return output_function(decoder_output_dropout)
+
+### Decoding the test/validation set
+def decode_test_set(encoder_state, decoder_cell, decoder_embedded_matrix, sos_id, eos_id, maximum_length, num_words, sequence_length, decoding_scope, output_function, keep_prob, batch_size):
+    attention_states = tf.zeros([batch_size, 1, decoder_cell.output_size])
+    attention_keys, attention_values, attention_score_function, attention_construct_function = tfa.seq2seq.AttentionWrapper(attention_states, attention_option = 'bahdanau', num_units = decoder_cell.output_size)
+    test_decoder_function = tfa.seq2seq.InferenceSampler(output_function, attention_keys, attention_values, attention_score_function, attention_construct_function, decoder_embedded_matrix, sos_id, eos_id, maximum_length, num_words, name ='attn_dec_inf')
+
+    test_predictions, _, _, = tfa.seq2seq.dynamic_decode(decoder_cell, test_decoder_function, scope = decoding_scope)
+    return test_predictions
+
+### Creating the Decoder RNN
+def decoder_rnn(decoder_embedded_input, decoder_embeddings_matrix, encoder_state, num_words, sequence_length, rnn_size, num_layers, word2int, keep_prob, batch_size):
+    with tf.variable_creator_scope('decoding') as decoding_scope:
+        lstm = tf.compat.v1.nn.rnn_cell.BasicLSTMCell(rnn_size)
+        lstm_dropout = tf.compat.v1.nn.rnn_cell.DropoutWrapper(lstm, input_keep_prob = keep_prob)
+        decoder_cell = tf.compat.v1.nn.rnn_cell.MultiRNNCell([lstm_dropout] * num_layers)
+        weights = tf.keras.initializers.TruncatedNormal(stddev=0.1)
+        biases = tf.zeros_initializer()
+        output_function = lambda x: tf.keras.layers.Dense(x, num_words, None, scope = decoding_scope, weights_initializer = weights, bias_initializer = biases)
+        training_predition = decode_training_set(encoder_state, decoder_cell, decoder_embedded_input, sequence_length, decoding_scope, output_function, keep_prob, batch_size)
+
+        decoding_scope.reuse_variable()
+        test_predictions = decode_test_set(encoder_state,
+                                            decoder_cell,
+                                            decoder_embeddings_matrix,
+                                            word2int['<SOS>'],
+                                            word2int['<EOS>'],
+                                            sequence_length-1,
+                                            num_words,
+                                            decoding_scope,
+                                            output_function,
+                                            keep_prob,
+                                            batch_size)
+
+    return training_predition, test_predictions
+
+
+### Building the seq2seq model
+def seq2seq_model(inputs, targets, keep_prob, batch_size, sequence_length, answers_num_words, question_num_words, encoder_embedding_size, decoder_embedding_size, rnn_size, num_layers, questionwords2int):
+    encoder_embedded_input = tf.keras.layers.Embedding(inputs,
+    answers_num_words + 1,
+    encoder_embedding_size,
+    initializers = tf.random_uniform_initializer(0,1))
+
+    encoder_state = encoder_rnn(encoder_embedded_input, rnn_size, num_layers, keep_prob, sequence_length)
+    preprocessed_target = preprocess_target(targets, questionwords2int, batch_size)
+    decoder_embedding_matrix = tf.Variable(tf.random.uniform([question_num_words+1, decoder_embedding_size], 0, 1))
+    decoder_embedded_input = tf.compat.v1.nn.embedding_lookup(decoder_embedding_matrix, preprocessed_target)
+    training_prediction, test_predictions = decoder_rnn( decoder_embedded_input, decoder_embedding_matrix, encoder_state, question_num_words, sequence_length, rnn_size, num_layers, questionwords2int, keep_prob, batch_size)
+
+    return training_prediction, test_predictions
+
+
+######### TRAINING SEQ2SEQ MODEL ############
+
+# Setting the Hyperparameters
+epochs = 100
+batch_size = 64
+rnn_size = 512
+num_layer = 3
+encoding_embedding_size = 512
+dencoding_embedding_size = 512
+learning_rate = 0.01
+learning_rate_decay = 0.9
+min_learning_rate = 0.0001
+keep_probability = 0.5
+
+# Defining session
+tf.compat.v1.reset_default_graph()
+session = tf.compat.v1.InteractiveSession()
+
+# Load Model inputs
+inputs, targets, lr, keep_prob = model_inputs()
+
+# Setting Seq Length
+sequence_length = tf.compat.v1.placeholder_with_default(25, None, name = 'sequence_length')
+
+# Getting the shape of inputs
+input_shape = tf.shape(inputs)
+
+# Getting the training and test predictions
+training_predictions, test_predictions = seq2seq_model(tf.reverse(inputs, [-1]),
+                                                        targets,
+                                                        keep_prob,
+                                                        batch_size,
+                                                        sequence_length,
+                                                        len(answersword2int),
+                                                        len(questionsword2int),
+                                                        encoding_embedding_size,
+                                                        dencoding_embedding_size,
+                                                        rnn_size,
+                                                        num_layer,
+                                                        questionsword2int)
+
+
+# Setting up loss Error, the Optimizer and gradient Clipping
+with tf.name_scope('optimization'):
+    loss_error = tfa.seq2seq.sequence_loss(training_predictions,
+    targets,
+    tf.compat.v1.ones([input_shape[0], sequence_length]))
+    optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate)
+    grads =  optimizer.compute_gradients(loss_error)
+    clipped_gradients =  [(tf.compat.v1.clip_by_value(grad_tensor, -5., 5.), grad_variable) for grad_tensor, grad_variable in grads if grad_tensor is not None]
+    optimizer_gradient_clipping = optimizer.apply_gradients(clipped_gradients)
+
+
+# Padding the sequences with the <PAD> token
+# Question: ['who', 'are', 'you', <PAD>, <PAD>, <PAD>, <PAD>]
+# Answer:   [<SOS>, 'I', 'am', 'a', 'bot' '.', <EOS>, <PAD>]
+
+def apply_padding(batch_of_sequences, word2int):
+    max_sequence_length = max([len(sequence) for sequence in batch_of_sequences])
+    return [sequence + [word2int['<PAD>']] * (max_sequence_length - len(sequence)) for sequence in batch_of_sequences]
+
+# Splitting the data into batches
+def split_into_batches(questions, answers, batch_size):
+    for batch_index in range(0, len(questions)//batch_size):
+        start_index = batch_index * batch_size
+        questions_in_batch = questions[start_index : start_index + batch_size]
+        answer_in_batch = answers[start_index : start_index + batch_size]
+        padded_question_in_batch = np.array(apply_padding(questions_in_batch, questionsword2int))
+        padded_answers_in_batch = np.array(apply_padding(answer_in_batch, answersword2int))
+        yield padded_question_in_batch, padded_answers_in_batch
+
+
+
